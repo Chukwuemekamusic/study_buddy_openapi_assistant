@@ -2,7 +2,7 @@ import time
 from openai import OpenAI
 import os
 import logging
-from typing import Dict, Optional
+from typing import Dict, Optional, List, Tuple
 from dataclasses import dataclass
 
 
@@ -25,7 +25,8 @@ class AssistantManager:
         self.thread = None
         self.run = None
         self.response = None
-        self.file_id_list = []
+        self.files_list = []
+        
         
         self.ASSISTANT_CONFIG = {
             "name": "Study Buddy",
@@ -35,7 +36,6 @@ class AssistantManager:
             Analyze the papers, noting strengths and limitations.
             Respond to queries effectively, incorporating feedback to enhance your accuracy.
             Handle data securely and update your knowledge base with the latest research.
-            Adhere to ethical standards, respect intellectual property, and provide users with guidance on any limitations.
             Maintain a feedback loop for continuous improvement and user support.
             Your ultimate goal is to facilitate a deeper understanding of complex scientific material, making it more accessible and comprehensible.""",
             "run_instructions": """Please answer the questions using the knowledge provided in the files.
@@ -49,41 +49,37 @@ class AssistantManager:
                 }
             }
         }
-        # create assistant during init
-        # self.create_assistant()
-        # self.create_thread()
         
     def retrieve_file_ids(self):
-        self.file_id_list = [file.id for file in self.client.files.list().data]
-        return self.file_id_list
+        self.files_list = [file.id for file in self.client.files.list().data]
+        return self.files_list
     
-    def retrieve_file_names_and_ids(self):
-        self.file_id_list = [(file.filename, file.id) for file in self.client.files.list().data]
-        return self.file_id_list
+    def get_file_names_and_ids(self) -> List[Tuple[str, str]]:
+        self.files_list = [(file.filename, file.id) for file in self.client.files.list().data]
+        return self.files_list
     
     def upload_file_openai(self, file_path):
-        """ Uploads a file to OpenAI and associates it with the assistant. This function will create an assistant if it doesn't exist since the assistant requires a file to be associated with it."""
+        """ Uploads a file to OpenAI and associates it with the assistant."""
         if not os.path.exists(file_path):
             raise FileNotFoundError(f"File not found: {file_path}")
-
+        
         try:
             with open(file_path, "rb") as file:
                 file_obj = self.client.files.create(
-                    file=file.read(),
-                    purpose="assistants",
-                    # metadata={"assistant_id": self.assistant.id} if self.assistant else None
+                    file=file,
+                    purpose="assistants"
                 )
             self.file_id = file_obj.id
-            if not self.assistant:
-                self.create_assistant(file_id=file_obj.id)
             logging.info(f"File created: {file_obj.id}")
+            # if not self.assistant:
+            #     self.create_assistant(file_id=file_obj.id)
             return file_obj.id
         except Exception as e:
             logging.error(f"Error uploading file: {str(e)}")
             raise
     
-    def upload_file_openai_2(self, file_path):
-        """ Uploads a file to OpenAI and associates it with the assistant. This function will create an assistant if it doesn't exist since the assistant requires a file to be associated with it."""
+    def upload_file(self, file_path):
+        """ Uploads a file to OpenAI and associates it with the assistant."""
         if not os.path.exists(file_path):
             raise FileNotFoundError(f"File not found: {file_path}")
         
@@ -93,8 +89,6 @@ class AssistantManager:
                 purpose="assistants"
             )
             self.file_id = file_obj.id
-            if not self.assistant:
-                self.create_assistant(file_id=file_obj.id)
             logging.info(f"File created: {file_obj.id}")
             return file_obj.id
         except Exception as e:
@@ -103,7 +97,10 @@ class AssistantManager:
      
     def create_assistant(self, file_id: str = None, custom_config: Dict = None):
         """Creates an OpenAI assistant with given or default configuration."""
-        file_id = file_id or self.file_id
+        file_id = file_id or self.file_id or self.files_list[0][1]
+        if not file_id:
+            raise ValueError("file id is required to create an assistant")
+        
         if self.assistant is None:
             try:
                 config = custom_config or self.ASSISTANT_CONFIG
@@ -128,7 +125,6 @@ class AssistantManager:
     
     def create_thread(self):
         """Creates an OpenAI thread."""
-        
         if self.thread is None:
             self.thread = self.client.beta.threads.create()
             logging.info(f"Thread created: {self.thread.id}")
@@ -138,6 +134,7 @@ class AssistantManager:
         return self.thread.id
     
     def add_message_to_thread(self, role: str, content: str):
+        """Adds a message to the thread."""
         if self.thread is None:
             self.create_thread()
         try:
@@ -152,10 +149,9 @@ class AssistantManager:
             raise
         
     def run_assistant(self, custom_instructions: str = None):
-        if not self.assistant:
-            raise ValueError("Assistant not initialized")
-        if not self.thread:
-            raise ValueError("Thread not initialized")
+        """Runs the assistant with the given instructions."""
+        if not self.assistant or not self.thread:
+            raise ValueError("Assistant or Thread not initialized")
         
         try:
             self.run = self.client.beta.threads.runs.create(
@@ -168,7 +164,7 @@ class AssistantManager:
             logging.error(f"Error running assistant: {e}")
             raise
         
-    def process_messages(self):
+    def process_messages(self) -> None:
         """Processes messages from the thread and extracts the response."""
         if not self.thread:
             raise ValueError("Thread not initialized")
@@ -211,40 +207,13 @@ class AssistantManager:
             if run.status == "completed":
                 self.process_messages()
                 break
-            # elif self.run.status == "requires_action":
-            #     self.handle_required_actions(self.run.required_action.submit_tool_outputs.model_dump())
             elif run.status in ["failed", "cancelled", "expired"]:
                 raise Exception(f"Run failed with status: {run.status}")
-    
         
-    def associate_file_with_assistant(self, file_id: str):
-        """Associates a file with the assistant."""
-        if not self.assistant:
-            self.create_assistant(file_id=file_id)
-        
-        try:
-            # Add the file ID to the assistant's tool resources
-            self.assistant = self.client.beta.assistants.update(
-                self.assistant.id,
-                tool_resources={"code_interpreter": {"file_ids": [file_id]}}
-            )
-            logging.info(f"File ID {file_id} associated with assistant {self.assistant.id}.")
-        except Exception as e:
-            logging.error(f"Error associating file with assistant: {e}")
-            raise
-
-        
+  
     
     def process_message_with_citations(self, message):
-        """
-        Extract content and annotations from the message and format citations as footnotes.
-
-        Args:
-            message: The message object containing content and annotations.
-
-        Returns:
-            str: The formatted message content with footnotes.
-        """
+        """Extracts content and annotations from the message and formats citations as footnotes."""
         try:
             message_content = message.content[0].text
             annotations = (
@@ -301,4 +270,21 @@ class AssistantManager:
             logging.error(f"Error processing news request: {e}")
             return None
         
+
+    def associate_file_with_assistant(self, file_id: str):
+        """Associates a file with the assistant."""
+        if not self.assistant:
+            self.create_assistant(file_id=file_id)
+        
+        try:
+            # Add the file ID to the assistant's tool resources
+            self.assistant = self.client.beta.assistants.update(
+                self.assistant.id,
+                tool_resources={"code_interpreter": {"file_ids": [file_id]}}
+            )
+            logging.info(f"File ID {file_id} associated with assistant {self.assistant.id}.")
+        except Exception as e:
+            logging.error(f"Error associating file with assistant: {e}")
+            raise
+
         

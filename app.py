@@ -4,9 +4,6 @@ from assistantClass import AssistantManager
 if "manager" not in st.session_state:
     st.session_state.manager = AssistantManager()
 
-# if "file_id_list" not in st.session_state:
-#     st.session_state.file_id_list = []
-
 if "start_chat" not in st.session_state:
     st.session_state.start_chat = False
 
@@ -28,8 +25,8 @@ if st.sidebar.button("Upload File"):
     if file_uploaded is not None:
         with open(f"{file_uploaded.name}", "wb") as file:
             file.write(file_uploaded.getbuffer())
-        file_id = st.session_state.manager.upload_file_openai_2(f"{file_uploaded.name}")
-        # st.session_state.manager.file_id_list.append(file_id)
+        file_id = st.session_state.manager.upload_file(f"{file_uploaded.name}")
+        # st.session_state.manager.files_list.append(file_id)
         st.sidebar.success(f"File uploaded: {file_id}")
         
         # st.sidebar.write(f"File ID: {file_id}")
@@ -37,13 +34,14 @@ if st.sidebar.button("Upload File"):
         st.sidebar.error("Please upload a file")
         
 # retrieve file ids
-st.session_state.manager.retrieve_file_ids()
+st.session_state.manager.get_file_names_and_ids()
 
 # Display uploaded files
-if st.session_state.manager.file_id_list:
+if st.session_state.manager.files_list:
     st.sidebar.write("Uploaded Files IDs:")
-    for file_id in st.session_state.manager.file_id_list:
-        st.sidebar.write(f"File ID: {file_id}")
+    for file_name, file_id in st.session_state.manager.files_list:
+        # st.sidebar.write(f"{file_name}: \n\t{file_id}")
+        st.sidebar.write(f"{file_name}:<br>&emsp;{file_id}", unsafe_allow_html=True)
         # associate file id with assistant
         st.session_state.manager.associate_file_with_assistant(file_id)
 
@@ -51,7 +49,7 @@ if st.session_state.manager.file_id_list:
 # ==== Main content - where users can chat with the assistant ====
 # Button to initiate the chat session
 if st.sidebar.button("Start Chatting..."):
-    if st.session_state.manager.file_id_list:
+    if st.session_state.manager.files_list:
         st.session_state.start_chat = True
 
         # Create a new thread for this chat session
@@ -68,6 +66,7 @@ st.write("Learn fast by chatting with your files")
 
 if not st.session_state.start_chat:
     st.write("Please upload a file and click 'Start Chatting...' to get started.")
+    
 else:
     # show existing messages
     for message in st.session_state.messages:
