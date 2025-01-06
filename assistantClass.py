@@ -5,6 +5,7 @@ import logging
 from typing import Dict, Optional, List, Tuple
 from dataclasses import dataclass
 
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 @dataclass
 class Citation:

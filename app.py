@@ -1,5 +1,7 @@
 import streamlit as st
 from assistantClass import AssistantManager
+import logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 if "manager" not in st.session_state:
     st.session_state.manager = AssistantManager()
@@ -32,7 +34,7 @@ if st.sidebar.button("Upload File"):
         # st.sidebar.write(f"File ID: {file_id}")
     else:
         st.sidebar.error("Please upload a file")
-        
+ 
 # retrieve file ids
 st.session_state.manager.get_file_names_and_ids()
 
@@ -40,7 +42,6 @@ st.session_state.manager.get_file_names_and_ids()
 if st.session_state.manager.files_list:
     st.sidebar.write("Uploaded Files IDs:")
     for file_name, file_id in st.session_state.manager.files_list:
-        # st.sidebar.write(f"{file_name}: \n\t{file_id}")
         st.sidebar.write(f"{file_name}:<br>&emsp;{file_id}", unsafe_allow_html=True)
         # associate file id with assistant
         st.session_state.manager.associate_file_with_assistant(file_id)
