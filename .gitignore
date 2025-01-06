@@ -2,3 +2,4 @@
 gitignore_folder/
 __pycache__/
 .env
+.gitignore 
